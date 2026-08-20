@@ -17,6 +17,7 @@ from nautobot_secrets_providers.providers import (
     AWSSecretsManagerSecretsProvider,
     AWSSystemsManagerParameterStore,
     HashiCorpVaultSecretsProvider,
+    OnePasswordConnectSecretsProvider,
     OnePasswordSecretsProvider,
 )
 from nautobot_secrets_providers.providers.choices import HashicorpKVVersionChoices
@@ -818,3 +819,70 @@ class OnePasswordSecretsProviderTestCase(SecretsProviderTestCase):
         with self.settings(PLUGINS_CONFIG=multiple_plugins_config):
             choices = one_password_vault_choices()
             self.assertEqual(choices, [("Example", "Example"), ("Example 2", "Example 2")])
+
+
+class OnePasswordConnectSecretsProviderTestCase(SecretsProviderTestCase):
+    """Tests for OnePasswordConnectSecretsProvider."""
+
+    provider = OnePasswordConnectSecretsProvider
+
+    def setUp(self):
+        super().setUp()
+
+        self.secret = Secret.objects.create(
+            name="hello-onepassword-connect",
+            provider=self.provider.slug,
+            parameters={
+                "vault": "example",
+                "item": "location",
+                "section": "section",
+                "field": "value",
+            },
+        )
+        self.secret2 = Secret.objects.create(
+            name="hello-onepassword-connect-2",
+            provider=self.provider.slug,
+            parameters={
+                "vault": "example_2",
+                "item": "location",
+                "field": "value",
+            },
+        )
+
+        self.plugin_config = {
+            "nautobot_secrets_providers": {
+                "one_password_connect": {
+                    "host": "http://localhost:8080",
+                    "token": "nautobot",
+                }
+            }
+        }
+
+    @patch("nautobot_secrets_providers.providers.one_password_connect.get_secret_from_connect", return_value="world")
+    def test_retrieve_success(self, get_secret_from_connect):
+        """Retrieve a secret successfully."""
+        with get_secret_from_connect:
+            with self.settings(PLUGINS_CONFIG=self.plugin_config):
+                response = self.provider.get_value_for_secret(self.secret)
+                self.assertEqual("world", response)
+                response2 = self.provider.get_value_for_secret(self.secret2)
+                self.assertEqual("world", response2)
+
+    def test_missing_provider_config(self):
+        """Raise an error when the provider is not configured at all."""
+        with self.settings(PLUGINS_CONFIG={"nautobot_secrets_providers": {}}):
+            with self.assertRaises(exceptions.SecretProviderError):
+                self.provider.get_host_and_token(self.secret)
+
+    def test_missing_host_or_token(self):
+        """Raise an error when host or token is missing from the configuration."""
+        incomplete_plugins_config = {
+            "nautobot_secrets_providers": {
+                "one_password_connect": {
+                    "host": "http://localhost:8080",
+                }
+            }
+        }
+        with self.settings(PLUGINS_CONFIG=incomplete_plugins_config):
+            with self.assertRaises(exceptions.SecretProviderError):
+                self.provider.get_host_and_token(self.secret)
