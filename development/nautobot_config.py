@@ -161,5 +161,9 @@ PLUGINS_CONFIG = {
                 "OP_SERVICE_ACCOUNT_TOKEN",
             ),
         },
+        "one_password_connect": {
+            "host": os.environ.get("OP_CONNECT_HOST"),
+            "token": os.environ.get("OP_CONNECT_TOKEN"),
+        },
     },
 }
