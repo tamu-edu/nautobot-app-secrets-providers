@@ -6,9 +6,14 @@ from nautobot.core.forms import BootstrapMixin
 from nautobot.extras.secrets import SecretsProvider, exceptions
 
 try:
+    from httpx import HTTPError
     from onepasswordconnectsdk.client import new_client
+    from onepasswordconnectsdk.errors import FailedToRetrieveItemException, FailedToRetrieveVaultException
 except ImportError:
     new_client = None
+    CONNECT_EXCEPTIONS = ()
+else:
+    CONNECT_EXCEPTIONS = (HTTPError, FailedToRetrieveItemException, FailedToRetrieveVaultException)
 
 __all__ = ("OnePasswordConnectSecretsProvider",)
 
@@ -84,21 +89,25 @@ class OnePasswordConnectSecretsProvider(SecretsProvider):
     @classmethod
     def get_host_and_token(cls, secret):
         """Get the configured 1Password Connect host and token."""
-        plugin_settings = settings.PLUGINS_CONFIG["nautobot_secrets_providers"]
-        if "one_password_connect" not in plugin_settings:
+        plugin_settings = getattr(settings, "PLUGINS_CONFIG", {}).get("nautobot_secrets_providers", {})
+        connect_settings = plugin_settings.get("one_password_connect", {})
+        if not connect_settings:
             raise exceptions.SecretProviderError(secret, cls, "1Password Connect is not configured!")
 
-        connect_settings = plugin_settings["one_password_connect"]
-        try:
-            return connect_settings["host"], connect_settings["token"]
-        except KeyError as exc:
+        host = connect_settings.get("host")
+        token = connect_settings.get("token")
+        if not host or not token:
             raise exceptions.SecretProviderError(
                 secret, cls, "1Password Connect 'host' and 'token' must both be configured!"
-            ) from exc
+            )
+        return host, token
 
     @classmethod
     def get_value_for_secret(cls, secret, obj=None, **kwargs):
         """Get the value for a secret from 1Password Connect."""
+        if not cls.is_available:
+            raise exceptions.SecretProviderError(secret, cls, "The 1Password Connect SDK is not installed!")
+
         host, token = cls.get_host_and_token(secret)
         parameters = secret.rendered_parameters(obj=obj)
 
@@ -113,3 +122,5 @@ class OnePasswordConnectSecretsProvider(SecretsProvider):
             )
         except ValueError as exc:
             raise exceptions.SecretProviderError(secret, cls, str(exc)) from exc
+        except CONNECT_EXCEPTIONS as exc:
+            raise exceptions.SecretProviderError(secret, cls, "Unable to retrieve secret from 1Password Connect.") from exc
