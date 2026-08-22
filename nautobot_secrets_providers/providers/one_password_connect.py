@@ -18,7 +18,7 @@ else:
 __all__ = ("OnePasswordConnectSecretsProvider",)
 
 
-def get_secret_from_connect(vault, item, field, host, token, section=None):
+def get_secret_from_connect(vault, item, field, host, token, section=None):  # pylint: disable=too-many-arguments
     """Get a secret from a 1Password Connect server.
 
     Args:
