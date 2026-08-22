@@ -91,8 +91,6 @@ class OnePasswordConnectSecretsProvider(SecretsProvider):
         """Get the configured 1Password Connect host and token."""
         plugin_settings = getattr(settings, "PLUGINS_CONFIG", {}).get("nautobot_secrets_providers", {})
         connect_settings = plugin_settings.get("one_password_connect", {})
-        if not connect_settings:
-            raise exceptions.SecretProviderError(secret, cls, "1Password Connect is not configured!")
 
         host = connect_settings.get("host")
         token = connect_settings.get("token")
