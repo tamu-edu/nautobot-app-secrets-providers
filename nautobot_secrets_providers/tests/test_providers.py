@@ -24,6 +24,14 @@ from nautobot_secrets_providers.providers.choices import HashicorpKVVersionChoic
 from nautobot_secrets_providers.providers.hashicorp import vault_choices
 from nautobot_secrets_providers.providers.one_password import vault_choices as one_password_vault_choices
 
+try:
+    from httpx import HTTPError
+    from onepasswordconnectsdk.errors import FailedToRetrieveItemException, FailedToRetrieveVaultException
+except ImportError:
+    HTTPError = Exception
+    FailedToRetrieveItemException = Exception
+    FailedToRetrieveVaultException = Exception
+
 # Use the proper swappable User model
 User = get_user_model()
 
@@ -886,3 +894,45 @@ class OnePasswordConnectSecretsProviderTestCase(SecretsProviderTestCase):
         with self.settings(PLUGINS_CONFIG=incomplete_plugins_config):
             with self.assertRaises(exceptions.SecretProviderError):
                 self.provider.get_host_and_token(self.secret)
+
+    @patch("nautobot_secrets_providers.providers.one_password_connect.get_secret_from_connect", side_effect=ValueError("Field 'password' was not found on item 'location'."))
+    def test_field_not_found(self, get_secret_from_connect):
+        """Raise SecretProviderError when the field is not found on the item."""
+        with self.settings(PLUGINS_CONFIG=self.plugin_config):
+            with self.assertRaises(exceptions.SecretProviderError):
+                self.provider.get_value_for_secret(self.secret)
+
+    @patch("nautobot_secrets_providers.providers.one_password_connect.get_secret_from_connect", side_effect=ValueError("Section 'section' was not found on item 'location'."))
+    def test_section_not_found(self, get_secret_from_connect):
+        """Raise SecretProviderError when the section is not found on the item."""
+        with self.settings(PLUGINS_CONFIG=self.plugin_config):
+            with self.assertRaises(exceptions.SecretProviderError):
+                self.provider.get_value_for_secret(self.secret)
+
+    @patch("nautobot_secrets_providers.providers.one_password_connect.get_secret_from_connect", side_effect=FailedToRetrieveVaultException("Vault not found"))
+    def test_vault_not_found(self, get_secret_from_connect):
+        """Raise SecretProviderError when the vault is not found."""
+        with self.settings(PLUGINS_CONFIG=self.plugin_config):
+            with self.assertRaises(exceptions.SecretProviderError):
+                self.provider.get_value_for_secret(self.secret)
+
+    @patch("nautobot_secrets_providers.providers.one_password_connect.get_secret_from_connect", side_effect=FailedToRetrieveItemException("Item not found"))
+    def test_item_not_found(self, get_secret_from_connect):
+        """Raise SecretProviderError when the item is not found."""
+        with self.settings(PLUGINS_CONFIG=self.plugin_config):
+            with self.assertRaises(exceptions.SecretProviderError):
+                self.provider.get_value_for_secret(self.secret)
+
+    @patch("nautobot_secrets_providers.providers.one_password_connect.get_secret_from_connect", side_effect=HTTPError("Connection error"))
+    def test_http_error(self, get_secret_from_connect):
+        """Raise SecretProviderError when an HTTP error occurs."""
+        with self.settings(PLUGINS_CONFIG=self.plugin_config):
+            with self.assertRaises(exceptions.SecretProviderError):
+                self.provider.get_value_for_secret(self.secret)
+
+    @patch.object(OnePasswordConnectSecretsProvider, "is_available", False)
+    def test_sdk_not_installed(self):
+        """Raise SecretProviderError when the 1Password Connect SDK is not installed."""
+        with self.settings(PLUGINS_CONFIG=self.plugin_config):
+            with self.assertRaises(exceptions.SecretProviderError):
+                self.provider.get_value_for_secret(self.secret)
