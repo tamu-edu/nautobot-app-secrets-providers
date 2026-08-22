@@ -17,6 +17,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from time import sleep
@@ -31,6 +32,47 @@ ORIGINAL_COMPOSE_FILES = [
     "docker-compose.postgres.yml",
     "docker-compose.dev.yml",
 ]
+
+
+def _command_exists(command):
+    return shutil.which(command) is not None
+
+
+def get_compose_cli():
+    """Determine whether to use docker compose or podman compose."""
+
+    # 1. Allow explicit override via an env variable.
+    # If the variable exists but is empty (e.g., export COMPOSE_CLI=""), return "docker compose" as the default.
+    if "COMPOSE_CLI" in os.environ:
+        return os.environ.get("COMPOSE_CLI") or "docker compose"
+
+    # 2. Prefer podman compose plugin when available.
+    if _command_exists("podman"):
+        try:
+            subprocess.check_output(["podman", "compose", "version"], text=True, stderr=subprocess.STDOUT)
+            return "podman compose"
+        except subprocess.CalledProcessError:
+            pass
+
+    # 3. Check if 'docker' is actually podman in disguise (handles symlinks/wrappers)
+    docker_path = shutil.which("docker")
+    if docker_path:
+        try:
+            # Run 'docker --version' and check the output
+            version_output = subprocess.check_output(
+                [docker_path, "--version"], text=True, stderr=subprocess.STDOUT
+            ).lower()
+            if "podman" in version_output:
+                return "podman compose"
+        except subprocess.CalledProcessError:
+            pass  # Command failed, fall through to default behavior
+
+    # 4. If docker isn't installed at all but podman is, use podman
+    if not docker_path and shutil.which("podman"):
+        return "podman compose"
+
+    # 5. Default to docker compose
+    return "docker compose"
 
 
 def is_truthy(arg):
@@ -66,6 +108,7 @@ namespace.configure(
             "python_ver": "3.12",
             "local": False,
             "ephemeral_ports": False,
+            "compose_cli": get_compose_cli(),
             "compose_dir": os.path.join(os.path.dirname(__file__), "development"),
             "compose_files": ORIGINAL_COMPOSE_FILES.copy(),
             "compose_http_timeout": "86400",
@@ -84,9 +127,11 @@ def _await_healthy_service(context, service):
 
 
 def _await_healthy_container(context, container_id):
+    compose_cli = context.nautobot_secrets_providers.compose_cli
+    runtime = "podman" if "podman" in compose_cli else "docker"
     while True:
         result = context.run(
-            "docker inspect --format='{{.State.Health.Status}}' " + container_id,
+            f"{runtime} inspect --format='{{.State.Health.Status}}' " + container_id,
             pty=False,
             echo=False,
             hide=True,
@@ -133,9 +178,11 @@ def docker_compose(context, command, **kwargs):
         "PYTHON_VER": context.nautobot_secrets_providers.python_ver,
         **kwargs.pop("env", {}),
     }
+    compose_cli = context.nautobot_secrets_providers.compose_cli
+
     compose_command_tokens = [
-        "docker compose",
-        f"--project-name {context.nautobot_secrets_providers.project_name}",
+        compose_cli,
+        f"-p {context.nautobot_secrets_providers.project_name}",
         f'--project-directory "{context.nautobot_secrets_providers.compose_dir}"',
     ]
 
@@ -285,7 +332,9 @@ def _get_docker_nautobot_version(context, nautobot_ver=None, python_ver=None):
     dockerfile_path = os.path.join(context.nautobot_secrets_providers.compose_dir, "Dockerfile")
     base_image = context.run(f"grep --max-count=1 '^FROM ' {dockerfile_path}", hide=True).stdout.strip().split(" ")[1]
     base_image = base_image.replace(r"${NAUTOBOT_VER}", nautobot_ver).replace(r"${PYTHON_VER}", python_ver)
-    pip_nautobot_ver = context.run(f"docker run --rm --entrypoint '' {base_image} pip show nautobot", hide=True)
+    compose_cli = context.nautobot_secrets_providers.compose_cli
+    runtime = "podman" if "podman" in compose_cli else "docker"
+    pip_nautobot_ver = context.run(f"{runtime} run --rm --entrypoint '' {base_image} pip show nautobot", hide=True)
     match_version = re.search(r"^Version: (.+)$", pip_nautobot_ver.stdout.strip(), flags=re.MULTILINE)
     if match_version:
         return match_version.group(1)
@@ -428,7 +477,9 @@ def destroy(context, volumes=True, import_db_file=""):
     container_id = docker_compose(context, " ".join(command), pty=False, echo=False, hide=True).stdout.strip()
     _await_healthy_container(context, container_id)
     print("Stopping database container...")
-    context.run(f"docker stop {container_id}", pty=False, echo=False, hide=True)
+    compose_cli = context.nautobot_secrets_providers.compose_cli
+    runtime = "podman" if "podman" in compose_cli else "docker"
+    context.run(f"{runtime} stop {container_id}", pty=False, echo=False, hide=True)
 
     print("Database import complete, you can start Nautobot with the following command:")
     print("invoke start")
