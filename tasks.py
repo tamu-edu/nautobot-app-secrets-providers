@@ -40,7 +40,6 @@ def _command_exists(command):
 
 def get_compose_cli():
     """Determine whether to use docker compose or podman compose."""
-
     # 1. Allow explicit override via an env variable.
     # If the variable exists but is empty (e.g., export COMPOSE_CLI=""), return "docker compose" as the default.
     if "COMPOSE_CLI" in os.environ:
