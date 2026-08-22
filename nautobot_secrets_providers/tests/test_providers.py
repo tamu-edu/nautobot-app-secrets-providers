@@ -896,35 +896,35 @@ class OnePasswordConnectSecretsProviderTestCase(SecretsProviderTestCase):
                 self.provider.get_host_and_token(self.secret)
 
     @patch("nautobot_secrets_providers.providers.one_password_connect.get_secret_from_connect", side_effect=ValueError("Field 'password' was not found on item 'location'."))
-    def test_field_not_found(self, get_secret_from_connect):
+    def test_field_not_found(self, _):
         """Raise SecretProviderError when the field is not found on the item."""
         with self.settings(PLUGINS_CONFIG=self.plugin_config):
             with self.assertRaises(exceptions.SecretProviderError):
                 self.provider.get_value_for_secret(self.secret)
 
     @patch("nautobot_secrets_providers.providers.one_password_connect.get_secret_from_connect", side_effect=ValueError("Section 'section' was not found on item 'location'."))
-    def test_section_not_found(self, get_secret_from_connect):
+    def test_section_not_found(self, _):
         """Raise SecretProviderError when the section is not found on the item."""
         with self.settings(PLUGINS_CONFIG=self.plugin_config):
             with self.assertRaises(exceptions.SecretProviderError):
                 self.provider.get_value_for_secret(self.secret)
 
     @patch("nautobot_secrets_providers.providers.one_password_connect.get_secret_from_connect", side_effect=FailedToRetrieveVaultException("Vault not found"))
-    def test_vault_not_found(self, get_secret_from_connect):
+    def test_vault_not_found(self, _):
         """Raise SecretProviderError when the vault is not found."""
         with self.settings(PLUGINS_CONFIG=self.plugin_config):
             with self.assertRaises(exceptions.SecretProviderError):
                 self.provider.get_value_for_secret(self.secret)
 
     @patch("nautobot_secrets_providers.providers.one_password_connect.get_secret_from_connect", side_effect=FailedToRetrieveItemException("Item not found"))
-    def test_item_not_found(self, get_secret_from_connect):
+    def test_item_not_found(self, _):
         """Raise SecretProviderError when the item is not found."""
         with self.settings(PLUGINS_CONFIG=self.plugin_config):
             with self.assertRaises(exceptions.SecretProviderError):
                 self.provider.get_value_for_secret(self.secret)
 
     @patch("nautobot_secrets_providers.providers.one_password_connect.get_secret_from_connect", side_effect=HTTPError("Connection error"))
-    def test_http_error(self, get_secret_from_connect):
+    def test_http_error(self, _):
         """Raise SecretProviderError when an HTTP error occurs."""
         with self.settings(PLUGINS_CONFIG=self.plugin_config):
             with self.assertRaises(exceptions.SecretProviderError):
