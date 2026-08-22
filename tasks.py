@@ -46,9 +46,10 @@ def get_compose_cli():
         return os.environ.get("COMPOSE_CLI") or "docker compose"
 
     # 2. Prefer podman compose plugin when available.
-    if _command_exists("podman"):
+    podman_path = shutil.which("podman")
+    if podman_path:
         try:
-            subprocess.check_output(["podman", "compose", "version"], text=True, stderr=subprocess.STDOUT)
+            subprocess.check_output([podman_path, "compose", "version"], text=True, stderr=subprocess.STDOUT) # noqa: S603
             return "podman compose"
         except subprocess.CalledProcessError:
             pass
@@ -58,7 +59,7 @@ def get_compose_cli():
     if docker_path:
         try:
             # Run 'docker --version' and check the output
-            version_output = subprocess.check_output(
+            version_output = subprocess.check_output(  # noqa: S603
                 [docker_path, "--version"], text=True, stderr=subprocess.STDOUT
             ).lower()
             if "podman" in version_output:
@@ -72,7 +73,6 @@ def get_compose_cli():
 
     # 5. Default to docker compose
     return "docker compose"
-
 
 def is_truthy(arg):
     """Convert "truthy" strings into Booleans.
