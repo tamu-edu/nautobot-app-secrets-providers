@@ -90,6 +90,18 @@
                 }
             },
             "required": ["base_url"]
+        },
+        "one_password_connect": {
+            "type": "object",
+            "properties": {
+                "host": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                }
+            },
+            "required": ["host", "token"]
         }
     }
 }
